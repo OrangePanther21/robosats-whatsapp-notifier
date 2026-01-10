@@ -43,9 +43,30 @@ if (config.ROBOSATS_USE_MOCK) {
       if (type !== null) params.type = type;
       
       const response = await this.axiosInstance.get(`${apiBasePath}/book/`, { params });
+      
+      // Ensure we always return an array
+      if (!Array.isArray(response.data)) {
+        const responseType = typeof response.data;
+        const responsePreview = responseType === 'string' 
+          ? response.data.substring(0, 100) 
+          : JSON.stringify(response.data).substring(0, 100);
+        logger.warn(`Coordinator ${coordinator} returned non-array response (${responseType}): ${responsePreview}${responsePreview.length >= 100 ? '...' : ''}`);
+        return [];
+      }
+      
       return response.data;
     } catch (error) {
-      logger.error(`Error fetching order book from ${coordinator}:`, error.message);
+      // Log detailed error information
+      if (error.response) {
+        // HTTP error response
+        logger.error(`Error fetching order book from ${coordinator}: HTTP ${error.response.status} ${error.response.statusText}`);
+      } else if (error.request) {
+        // Request made but no response received
+        logger.error(`Error fetching order book from ${coordinator}: No response received (timeout or network error)`);
+      } else {
+        // Something else happened
+        logger.error(`Error fetching order book from ${coordinator}: ${error.message}`);
+      }
       return []; // Return empty array on error so other coordinators can still be checked
     }
   }
@@ -57,6 +78,13 @@ if (config.ROBOSATS_USE_MOCK) {
     for (const coordinator of this.coordinators) {
       try {
         const offers = await this.getOrderBookFromCoordinator(coordinator, currency, type);
+        
+        // Validate that offers is an array
+        if (!Array.isArray(offers)) {
+          logger.warn(`Skipping ${coordinator} coordinator: API returned non-array response (${typeof offers})`);
+          continue;
+        }
+        
         // Add coordinator info to each offer for tracking
         const offersWithCoordinator = offers.map(offer => ({
           ...offer,
@@ -65,7 +93,11 @@ if (config.ROBOSATS_USE_MOCK) {
         allOffers.push(...offersWithCoordinator);
         logger.info(`Found ${offers.length} offers from ${coordinator} coordinator`);
       } catch (error) {
-        logger.warn(`Skipping ${coordinator} coordinator due to error`);
+        // Error already logged in getOrderBookFromCoordinator, just warn here
+        const errorMsg = error.response 
+          ? `HTTP ${error.response.status}: ${error.response.statusText}`
+          : error.message || 'Unknown error';
+        logger.warn(`Skipping ${coordinator} coordinator: ${errorMsg}`);
       }
     }
     

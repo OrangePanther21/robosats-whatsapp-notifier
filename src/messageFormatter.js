@@ -46,35 +46,15 @@ function formatOffer(offer) {
     const maxAmt = parseFloat(offer.max_amount).toLocaleString();
     fiatAmount = `${minAmt} - ${maxAmt} ${currencyCode}`;
     
-    // Calculate sats range - use satoshis_now/satoshis as reference if available (includes fees)
-    // For ranges, we need to calculate proportionally based on the midpoint or use price
-    const sats = offer.satoshis_now !== undefined && offer.satoshis_now !== null 
-      ? offer.satoshis_now 
-      : offer.satoshis;
-    
-    // Try to use actual satoshis if we have a reference amount
-    if (sats !== undefined && sats !== null) {
-      // For ranges, calculate based on the midpoint of the range
-      const minAmount = parseFloat(offer.min_amount);
-      const maxAmount = parseFloat(offer.max_amount);
-      const midAmount = (minAmount + maxAmount) / 2;
-      
-      // If we have satoshis, assume it corresponds to the midpoint
-      // Calculate ratio: sats per unit of fiat
-      const ratio = sats / midAmount;
-      const minSats = Math.round(minAmount * ratio);
-      const maxSats = Math.round(maxAmount * ratio);
-      satsAmount = `${minSats.toLocaleString()} - ${maxSats.toLocaleString()} sats`;
-    } else {
-      // Fallback: calculate from price (doesn't include fees)
-      const price = offer.price_now !== undefined && offer.price_now !== null 
-        ? offer.price_now 
-        : offer.price;
-      if (price && price > 0) {
-        const minSats = Math.round((parseFloat(offer.min_amount) / price) * 100000000);
-        const maxSats = Math.round((parseFloat(offer.max_amount) / price) * 100000000);
-        satsAmount = `${minSats.toLocaleString()} - ${maxSats.toLocaleString()} sats`;
-      }
+    // Calculate sats range from price (price is in fiat per BTC)
+    // Formula: (fiat_amount / fiat_per_btc) * 100,000,000 = sats
+    const price = offer.price_now !== undefined && offer.price_now !== null 
+      ? offer.price_now 
+      : offer.price;
+    if (price && price > 0) {
+      const minSats = Math.round((parseFloat(offer.min_amount) / price) * 100000000);
+      const maxSats = Math.round((parseFloat(offer.max_amount) / price) * 100000000);
+      satsAmount = `~${minSats.toLocaleString()} - ${maxSats.toLocaleString()} sats`;
     }
   } else if (offer.amount) {
     const amt = parseFloat(offer.amount).toLocaleString();
@@ -85,7 +65,7 @@ function formatOffer(offer) {
       ? offer.satoshis_now 
       : offer.satoshis;
     if (sats !== undefined && sats !== null) {
-      satsAmount = `${sats.toLocaleString()} sats`;
+      satsAmount = `~${sats.toLocaleString()} sats`;
     }
   } else {
     // No fiat amount, try to show sats if available
@@ -93,7 +73,7 @@ function formatOffer(offer) {
       ? offer.satoshis_now 
       : offer.satoshis;
     if (sats !== undefined && sats !== null) {
-      satsAmount = `${sats.toLocaleString()} sats`;
+      satsAmount = `~${sats.toLocaleString()} sats`;
     }
   }
   
@@ -104,7 +84,14 @@ function formatOffer(offer) {
   }
   
   // Format price
-  const price = offer.price ? `${Math.round(offer.price).toLocaleString()} ${currencyCode}` : strings.market;
+  // Note: Robosats API price might be in different units - check if it needs conversion
+  let priceValue = offer.price;
+  if (priceValue && typeof priceValue === 'number') {
+    // Check if price seems unusually high (might be in smaller units or need division)
+    // For now, display as-is but this might need adjustment based on API documentation
+    priceValue = Math.round(priceValue);
+  }
+  const price = offer.price ? `${priceValue.toLocaleString()} ${currencyCode}` : strings.market;
   const premium = offer.premium ? `${parseFloat(offer.premium) > 0 ? '+' : ''}${offer.premium}%` : '';
   
   // Format expiration time if available - show relative time (e.g., "in 2h 30m")

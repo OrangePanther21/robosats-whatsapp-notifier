@@ -60,7 +60,6 @@ ROBOSATS_COORDINATORS=all
 TARGET_CURRENCIES=USD,EUR,GBP
 CHECK_INTERVAL_MINUTES=5
 LANGUAGE=EN
-TIMEZONE=UTC
 LOG_LEVEL=info
 ```
 
@@ -74,7 +73,6 @@ LOG_LEVEL=info
 
 **Optional Environment Variables:**
 - `LANGUAGE` - Message language: `EN` (English) or `ES` (Spanish) (default: EN)
-- `TIMEZONE` - Timezone for date formatting (IANA timezone, e.g., `America/New_York`, `Europe/London`) (default: UTC)
 - `LOG_LEVEL` - Logging level (default: info)
 - `ROBOSATS_USE_MOCK` - Use mock data for testing (default: false)
 
@@ -168,11 +166,11 @@ robosats-whatsapp-notifier/
 
 1. **Initialization**: Loads previous offer history and initializes WhatsApp client
 2. **Periodic Checks**: Every X minutes (configurable), fetches the Robosats order book from all coordinators (or specified ones)
-3. **Cleanup**: Removes offers older than 24 hours from the tracking database
+3. **Cleanup**: Removes expired offers from the tracking database (based on each offer's expiration time)
 4. **Filtering**: Extracts only active offers for the target currencies
 5. **Comparison**: Compares against stored offer IDs to find new ones
 6. **Notification**: Formats and sends each new offer as a separate WhatsApp message (one message per offer)
-7. **Storage**: Updates the seen offers database with timestamps
+7. **Storage**: Updates the seen offers database with expiration timestamps
 
 **Multi-Coordinator Support**: By default, the bot checks all 8 RoboSats coordinators (bazaar, moon, lake, temple, veneto, freedomsats, whiteyesats, alice) to ensure you don't miss any offers.
 
@@ -260,7 +258,6 @@ All configuration is in `src/config.js`:
 | `ROBOSATS_ONION_URL` | Onion URL for WhatsApp message links | Yes | http://robosatsy56...onion |
 | `TARGET_CURRENCIES` | Currencies to monitor (comma-separated codes) | Yes | USD,EUR,GBP |
 | `LANGUAGE` | Message language (EN or ES) | No | EN |
-| `TIMEZONE` | Timezone for date formatting (IANA format) | No | UTC |
 | `ROBOSATS_USE_MOCK` | Use mock data for testing | No | false |
 | `LOG_LEVEL` | Logging level | No | info |
 
@@ -279,10 +276,10 @@ Message 1 (Fixed amount):
 ```
 *🟢 BUY Bitcoin - Robosats (Bazaar)*
 ━━━━━━━━━━━━━━━━━
-💰 *Amount:* 200,000 USD (39,216 sats)
-💵 *Price:* 59,134 USD +2.5%
+💰 *Amount:* 200,000 USD (~39,216 sats)
+💵 *Price:* 59,134 USD (+2.5%)
 🏦 *Payment:* Bank Transfer
-⏰ *Expires in:* 2h 30m
+⏳ *Expires in:* 2h 30m
 🔗 http://robosatsy56bwqn56qyadmcxkx767hnabg4mihxlmgyt6if5gnuxvzad.onion/order/bazaar/12345
 ━━━━━━━━━━━━━━━━━
 ```
@@ -291,10 +288,10 @@ Message 2 (Amount range):
 ```
 *🔴 SELL Bitcoin - Robosats (Lake)*
 ━━━━━━━━━━━━━━━━━
-💰 *Amount:* 200,000 - 1,000,000 USD (39,216 - 196,078 sats)
-💵 *Price:* 59,460 USD +3.0%
+💰 *Amount:* 200,000 - 1,000,000 USD (~39,216 - 196,078 sats)
+💵 *Price:* 59,460 USD (+3.0%)
 🏦 *Payment:* Cash
-⏰ *Expires in:* 1h 15m
+⏳ *Expires in:* 1h 15m
 🔗 http://robosatsy56bwqn56qyadmcxkx767hnabg4mihxlmgyt6if5gnuxvzad.onion/order/lake/72288
 ━━━━━━━━━━━━━━━━━
 ```
@@ -304,17 +301,17 @@ Message 2 (Amount range):
 ```
 *🟢 COMPRA Bitcoin - Robosats (Bazaar)*
 ━━━━━━━━━━━━━━━━━
-💰 *Monto:* 200.000 USD (39.216 sats)
-💵 *Precio:* 59.134 USD +2.5%
+💰 *Monto:* 200.000 USD (~39.216 sats)
+💵 *Precio:* 59.134 USD (+2.5%)
 🏦 *Pago:* Transferencia
-⏰ *Expira en:* 2h 30m
+⏳ *Expira en:* 2h 30m
 🔗 http://robosatsy56bwqn56qyadmcxkx767hnabg4mihxlmgyt6if5gnuxvzad.onion/order/bazaar/12345
 ━━━━━━━━━━━━━━━━━
 ```
 
 **Message Features:**
 - **Individual messages**: Each offer is sent as a separate message for better usability
-- **Amount display**: Shows both fiat and satoshi amounts (or ranges for flexible offers)
+- **Amount display**: Shows both fiat and satoshi amounts (or ranges for flexible offers) with approximate sign (~) for sats
 - **Expiration time**: Displays relative time remaining (e.g., "2h 30m", "45m", "5d 3h")
 - **Coordinator names**: Friendly display names (e.g., "Bazaar" instead of "bazaar")
 - **No link previews**: Onion links are sent without previews since they won't load in WhatsApp
@@ -453,7 +450,7 @@ According to Robosats documentation:
 - **API version**: Robosats API is v0 (beta) and may change; monitor for errors
 - **Rate limiting**: 5-minute interval should be safe from rate limits; 1-second delay between messages prevents WhatsApp rate limiting
 - **Individual messages**: Each offer is sent as a separate message for better usability
-- **Expiration tracking**: Offers older than 24 hours are automatically removed from the tracking database
+- **Expiration tracking**: Expired offers are automatically removed from the tracking database (based on each offer's expiration time)
 - **Amount ranges**: Supports both fixed amounts and flexible amount ranges (min-max)
 - **Group name**: Must match exactly (case-sensitive)
 - **Backups**: Consider backing up `.wwebjs_auth/` and `data/` folders
