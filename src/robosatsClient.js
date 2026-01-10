@@ -1,0 +1,116 @@
+const axios = require('axios');
+const config = require('./config');
+const logger = require('./logger');
+
+// Check if we should use mock mode
+if (config.ROBOSATS_USE_MOCK) {
+  logger.warn('⚠️  MOCK MODE ENABLED - Using fake data for testing');
+  logger.warn('⚠️  Set ROBOSATS_USE_MOCK=false in .env for production');
+  module.exports = require('./robosatsClientMock');
+} else {
+  module.exports = new (class RobosatsClient {
+  constructor() {
+    this.apiUrl = config.ROBOSATS_API_URL;
+    
+    // Determine which coordinators to check
+    if (config.ROBOSATS_COORDINATORS === 'all') {
+      this.coordinators = config.AVAILABLE_COORDINATORS;
+    } else {
+      // Parse comma-separated list
+      this.coordinators = config.ROBOSATS_COORDINATORS.split(',').map(c => c.trim()).filter(c => c);
+    }
+    
+    // Configure axios
+    const axiosConfig = {
+      baseURL: this.apiUrl,
+      timeout: 30000,
+      headers: { 'User-Agent': 'RobosatsBot/1.0' }
+    };
+
+    this.axiosInstance = axios.create(axiosConfig);
+    
+    // Log configuration
+    const currencyCodes = config.TARGET_CURRENCIES.map(c => c.code).join(', ');
+    logger.info(`Monitoring ${this.coordinators.length} coordinator(s): ${this.coordinators.join(', ')}`);
+    logger.info(`Target currencies: ${currencyCodes}`);
+  }
+
+  async getOrderBookFromCoordinator(coordinator, currency = null, type = null) {
+    try {
+      const apiBasePath = `/mainnet/${coordinator}/api`;
+      const params = {};
+      if (currency) params.currency = currency;
+      if (type !== null) params.type = type;
+      
+      const response = await this.axiosInstance.get(`${apiBasePath}/book/`, { params });
+      return response.data;
+    } catch (error) {
+      logger.error(`Error fetching order book from ${coordinator}:`, error.message);
+      return []; // Return empty array on error so other coordinators can still be checked
+    }
+  }
+
+  async getOrderBook(currency = null, type = null) {
+    // Check all coordinators and aggregate results
+    const allOffers = [];
+    
+    for (const coordinator of this.coordinators) {
+      try {
+        const offers = await this.getOrderBookFromCoordinator(coordinator, currency, type);
+        // Add coordinator info to each offer for tracking
+        const offersWithCoordinator = offers.map(offer => ({
+          ...offer,
+          coordinator: coordinator
+        }));
+        allOffers.push(...offersWithCoordinator);
+        logger.info(`Found ${offers.length} offers from ${coordinator} coordinator`);
+      } catch (error) {
+        logger.warn(`Skipping ${coordinator} coordinator due to error`);
+      }
+    }
+    
+    return allOffers;
+  }
+
+  async getOffers() {
+    const orderBook = await this.getOrderBook();
+    
+    // Get target currency IDs
+    const targetCurrencyIds = config.TARGET_CURRENCIES.map(c => c.id);
+    
+    // Filter by target currency IDs
+    // All orders in the book are public (status 1), so we filter by currency
+    const offers = orderBook.filter(offer => {
+      return targetCurrencyIds.includes(offer.currency);
+    });
+
+    // Add currency code to each offer for easier formatting
+    offers.forEach(offer => {
+      const currency = config.TARGET_CURRENCIES.find(c => c.id === offer.currency);
+      if (currency) {
+        offer.currencyCode = currency.code;
+      }
+    });
+
+    const currencyCodes = config.TARGET_CURRENCIES.map(c => c.code).join(', ');
+    logger.info(`Found ${offers.length} offers (${currencyCodes}) across ${this.coordinators.length} coordinator(s) out of ${orderBook.length} total offers`);
+    
+    return offers;
+  }
+
+  async getInfo() {
+    // Get info from first available coordinator
+    for (const coordinator of this.coordinators) {
+      try {
+        const apiBasePath = `/mainnet/${coordinator}/api`;
+        const response = await this.axiosInstance.get(`${apiBasePath}/info/`);
+        return response.data;
+      } catch (error) {
+        logger.warn(`Failed to get info from ${coordinator}, trying next...`);
+        continue;
+      }
+    }
+    throw new Error('Failed to get info from all coordinators');
+  }
+  })();
+}

@@ -1,0 +1,23 @@
+{
+  "name": "robosats-whatsapp-notifier",
+  "version": "1.0.0",
+  "description": "Monitor Robosats offers and notify WhatsApp group",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "node src/test.js"
+  },
+  "keywords": ["robosats", "whatsapp", "bitcoin"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.23.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
