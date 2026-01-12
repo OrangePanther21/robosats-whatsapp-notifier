@@ -265,8 +265,13 @@
                 const labelEl = document.createElement('label');
                 labelEl.textContent = label;
                 
-                // Make the entire div clickable
+                // Make the entire div clickable, but let checkbox/radio handle their own clicks
                 div.addEventListener('click', (e) => {
+                    // If clicking directly on checkbox/radio, let it handle the event naturally
+                    if (e.target === checkbox) {
+                        return;
+                    }
+                    
                     e.preventDefault();
                     e.stopPropagation();
                     
@@ -284,6 +289,23 @@
                             this.toggleAll(newChecked);
                         } else {
                             this.toggleOption(value, newChecked);
+                        }
+                    }
+                });
+                
+                // Handle checkbox/radio clicks
+                checkbox.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    
+                    if (this.singleSelect) {
+                        if (checkbox.checked) {
+                            this.toggleOption(value, true);
+                        }
+                    } else {
+                        if (value === 'all') {
+                            this.toggleAll(checkbox.checked);
+                        } else {
+                            this.toggleOption(value, checkbox.checked);
                         }
                     }
                 });

@@ -137,14 +137,14 @@ function parseCheckInterval() {
 
 // Coordinator name mapping (ID -> Display Name)
 const COORDINATOR_MAP = {
-  'bazaar': 'Bazaar',
-  'moon': 'Moon',
-  'lake': 'Lake',
-  'temple': 'Temple',
-  'veneto': 'Veneto',
-  'freedomsats': 'FreedomSats',
-  'whiteyesats': 'WhiteYesats',
   'alice': 'Alice',
+  'whiteyesats': 'WhitEyeSats',
+  'freedomsats': 'FreedomSats',
+  'bazaar': 'LibreBazaar',
+  'moon': 'Over the moon',
+  'veneto': 'BitcoinVeneto',
+  'lake': 'TheBigLake',
+  'temple': 'Temple of Sats',
   'mock': 'Mock' // For testing
 };
 

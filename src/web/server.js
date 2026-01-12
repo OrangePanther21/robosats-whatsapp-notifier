@@ -108,17 +108,20 @@ class WebServer {
       });
     });
 
-    // Get available currencies
+    // Get available currencies (sorted alphabetically)
     this.app.get('/api/currencies', (req, res) => {
-      res.json(Object.keys(config.CURRENCY_MAP));
+      const currencies = Object.keys(config.CURRENCY_MAP).sort();
+      res.json(currencies);
     });
 
-    // Get available coordinators with display names
+    // Get available coordinators with display names (sorted alphabetically by name)
     this.app.get('/api/coordinators', (req, res) => {
       const coordinatorsWithNames = config.AVAILABLE_COORDINATORS.map(id => ({
         id: id,
         name: config.COORDINATOR_MAP[id] || id
       }));
+      // Sort by name alphabetically
+      coordinatorsWithNames.sort((a, b) => a.name.localeCompare(b.name));
       res.json(coordinatorsWithNames);
     });
 

@@ -134,6 +134,24 @@ function formatOffer(offer) {
     }
   }
   
+  // Format payment methods - handle arrays or strings with multiple methods
+  let paymentMethod = strings.seeOffer;
+  if (offer.payment_method) {
+    if (Array.isArray(offer.payment_method)) {
+      // If it's an array, join with commas
+      paymentMethod = offer.payment_method.join(', ');
+    } else if (typeof offer.payment_method === 'string') {
+      // If it's a string, normalize separators to commas
+      // Replace common separators (space, dash, slash, pipe) with comma
+      paymentMethod = offer.payment_method
+        .replace(/\s*[\/\|\-]\s*/g, ', ')  // Replace /, |, - with comma
+        .replace(/\s{2,}/g, ', ')           // Replace multiple spaces with comma
+        .trim();
+    } else {
+      paymentMethod = String(offer.payment_method);
+    }
+  }
+  
   // Show coordinator (always present from robosatsClient)
   const coordinatorId = offer.coordinator;
   const coordinatorName = config.COORDINATOR_MAP[coordinatorId] || coordinatorId;
@@ -146,7 +164,7 @@ function formatOffer(offer) {
 ━━━━━━━━━━━━━━━━━
 💰 *${strings.amount}:* ${amount}
 💵 *${strings.price}:* ${price}${premium ? ` (${premium})` : ''}
-🏦 *${strings.payment}:* ${offer.payment_method || strings.seeOffer}
+🏦 *${strings.payment}:* ${paymentMethod}
 ⏳ *${strings.expiresAt}:* ${expiresInfo}
 🔗 ${link}
 `.trim();
