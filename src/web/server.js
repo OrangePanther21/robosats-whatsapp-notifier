@@ -41,7 +41,25 @@ class WebServer {
     this.app.post('/api/settings', (req, res) => {
       try {
         const newSettings = req.body;
-        config.saveConfig(newSettings);
+        
+        // Get existing config to merge with
+        const existingConfig = config.getConfig();
+        
+        // Merge new settings with existing config
+        const mergedConfig = { ...existingConfig, ...newSettings };
+        
+        // Clean up opposite notification type's fields based on notification type
+        const notificationType = mergedConfig.NOTIFICATION_TYPE || 'group';
+        if (notificationType === 'contact') {
+          // Delete group name when switching to contact
+          delete mergedConfig.WHATSAPP_GROUP_NAME;
+        } else {
+          // Delete contact fields when switching to group
+          delete mergedConfig.CONTACT_COUNTRY_CODE;
+          delete mergedConfig.CONTACT_PHONE_NUMBER;
+        }
+        
+        config.saveConfig(mergedConfig);
         
         // Reload configuration immediately
         config.reloadConfig();
@@ -104,7 +122,12 @@ class WebServer {
       res.json(coordinatorsWithNames);
     });
 
-    // Send test message to WhatsApp group
+    // Get available country codes
+    this.app.get('/api/countries', (req, res) => {
+      res.json(config.COUNTRY_CODES);
+    });
+
+    // Send test message to WhatsApp group or contact
     this.app.post('/api/test-message', async (req, res) => {
       try {
         if (!this.whatsappClient.isReady) {
@@ -113,37 +136,66 @@ class WebServer {
           });
         }
 
-        // Use groupName from request body if provided, otherwise fall back to config
-        const groupName = req.body.groupName || config.WHATSAPP_GROUP_NAME;
-        
-        if (!groupName) {
-          return res.status(400).json({
-            error: 'Please enter a group name'
-          });
-        }
-
+        const notificationType = req.body.notificationType || 'group';
         const testMessage = '🤖 *Test Message from RoboSats WhatsApp Notifier*\n\nIf you can see this message, the bot is working correctly!';
-        
-        // Send to the specified group
-        const chats = await this.whatsappClient.client.getChats();
-        const group = chats.find(chat => 
-          chat.isGroup && chat.name === groupName
-        );
 
-        if (!group) {
-          return res.status(404).json({ 
-            error: `Group "${groupName}" not found. Please check the group name is correct.` 
+        if (notificationType === 'contact') {
+          // Test contact message
+          const countryCode = req.body.countryCode;
+          const phoneNumber = req.body.phoneNumber;
+
+          if (!countryCode || !phoneNumber) {
+            return res.status(400).json({
+              error: 'Please enter country code and phone number'
+            });
+          }
+
+          // Validate phone number format (digits only, 6-15 characters)
+          const cleanPhone = phoneNumber.replace(/\D/g, '');
+          if (cleanPhone.length < 6 || cleanPhone.length > 15) {
+            return res.status(400).json({
+              error: 'Phone number must be 6-15 digits'
+            });
+          }
+
+          await this.whatsappClient.sendToContact(countryCode, phoneNumber, testMessage);
+          
+          res.json({ 
+            success: true, 
+            message: `Test message sent successfully to ${countryCode} ${phoneNumber}!` 
           });
-        }
+          
+          logger.info(`Test message sent to contact ${countryCode} ${phoneNumber} via web UI`);
+        } else {
+          // Test group message
+          const groupName = req.body.groupName || config.WHATSAPP_GROUP_NAME;
+          
+          if (!groupName) {
+            return res.status(400).json({
+              error: 'Please enter a group name'
+            });
+          }
 
-        await group.sendMessage(testMessage, { linkPreview: false });
-        
-        res.json({ 
-          success: true, 
-          message: `Test message sent successfully to "${groupName}"!` 
-        });
-        
-        logger.info(`Test message sent to group "${groupName}" via web UI`);
+          const chats = await this.whatsappClient.client.getChats();
+          const group = chats.find(chat => 
+            chat.isGroup && chat.name === groupName
+          );
+
+          if (!group) {
+            return res.status(404).json({ 
+              error: `Group "${groupName}" not found. Please check the group name is correct.` 
+            });
+          }
+
+          await group.sendMessage(testMessage, { linkPreview: false });
+          
+          res.json({ 
+            success: true, 
+            message: `Test message sent successfully to "${groupName}"!` 
+          });
+          
+          logger.info(`Test message sent to group "${groupName}" via web UI`);
+        }
       } catch (error) {
         logger.error('Error sending test message:', error);
         res.status(500).json({ 

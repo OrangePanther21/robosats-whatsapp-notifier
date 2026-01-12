@@ -17,6 +17,14 @@ async function checkForNewOffers() {
       return;
     }
     
+    // Validate notification configuration
+    try {
+      config.validateNotificationConfig();
+    } catch (error) {
+      logger.error('Notification configuration error:', error.message);
+      return;
+    }
+    
     // Clean up expired offers
     await offerTracker.cleanupExpiredOffers();
     
@@ -32,7 +40,7 @@ async function checkForNewOffers() {
       // Send one message per offer
       for (const offer of newOffers) {
         const message = formatOffer(offer);
-        await whatsappClient.sendToGroup(message);
+        await whatsappClient.sendNotification(message);
         // Small delay between messages to avoid rate limiting
         if (newOffers.length > 1) {
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -41,7 +49,7 @@ async function checkForNewOffers() {
       
       await offerTracker.addOffers(newOffers);
       
-      logger.info(`Successfully sent ${newOffers.length} offer notification(s) to group`);
+      logger.info(`Successfully sent ${newOffers.length} offer notification(s)`);
     } else {
       logger.info('No new offers found');
     }

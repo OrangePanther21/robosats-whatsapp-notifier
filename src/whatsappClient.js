@@ -110,6 +110,44 @@ class WhatsAppClient extends EventEmitter {
     await group.sendMessage(message, { linkPreview: false });
     logger.info('Message sent to WhatsApp group');
   }
+
+  async sendToContact(countryCode, phoneNumber, message) {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+
+    // Format: countryCode (without +) + phoneNumber + @c.us
+    // Example: 1234567890@c.us
+    const cleanCountryCode = countryCode.replace('+', '');
+    const cleanPhoneNumber = phoneNumber.replace(/\D/g, ''); // Remove non-digits
+    const chatId = `${cleanCountryCode}${cleanPhoneNumber}@c.us`;
+
+    try {
+      await this.client.sendMessage(chatId, message, { linkPreview: false });
+      logger.info(`Message sent to WhatsApp contact: ${chatId}`);
+    } catch (error) {
+      logger.error(`Failed to send message to contact ${chatId}:`, error);
+      throw new Error(`Failed to send message to contact +${cleanCountryCode} ${cleanPhoneNumber}: ${error.message}`);
+    }
+  }
+
+  async sendNotification(message) {
+    const notificationType = config.NOTIFICATION_TYPE || 'group';
+
+    if (notificationType === 'contact') {
+      const countryCode = config.CONTACT_COUNTRY_CODE;
+      const phoneNumber = config.CONTACT_PHONE_NUMBER;
+
+      if (!countryCode || !phoneNumber) {
+        throw new Error('Contact notification type selected but country code or phone number not configured');
+      }
+
+      await this.sendToContact(countryCode, phoneNumber, message);
+    } else {
+      // Default to group
+      await this.sendToGroup(message);
+    }
+  }
 }
 
 module.exports = new WhatsAppClient();
