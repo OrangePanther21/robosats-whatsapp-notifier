@@ -168,15 +168,20 @@ async function start() {
     
     logger.info('All systems ready.');
     
-    // Only start checking if bot is enabled
-    if (config.BOT_ENABLED) {
+    // Only start checking if bot is enabled AND not first run
+    // On first run, user must configure settings and explicitly start the bot
+    if (config.BOT_ENABLED && !config.IS_FIRST_RUN) {
       logger.info('Bot is enabled - starting periodic checks...');
       // Run first check immediately
       await checkForNewOffers();
       // Start the check interval
       startCheckInterval();
     } else {
-      logger.info('Bot is paused - waiting for activation from UI...');
+      if (config.IS_FIRST_RUN) {
+        logger.info('First run detected - waiting for initial configuration...');
+      } else {
+        logger.info('Bot is paused - waiting for activation from UI...');
+      }
     }
     
     // Listen for config changes

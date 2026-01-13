@@ -390,11 +390,15 @@ function parseLanguage() {
   return lang;
 }
 
+// Track if this is a first run (no config file existed at startup)
+let IS_FIRST_RUN = false;
+
 // Load configuration from JSON file if it exists, otherwise use env vars
 function loadConfig() {
   const configPath = getConfigPath();
+  const configExists = fs.existsSync(configPath);
   
-  if (fs.existsSync(configPath)) {
+  if (configExists) {
     try {
       const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       // Override process.env with values from config file
@@ -413,6 +417,7 @@ function loadConfig() {
   if (!process.env.BOT_ENABLED) {
     process.env.BOT_ENABLED = 'false';
   }
+  IS_FIRST_RUN = true;
   return false;
 }
 
@@ -445,6 +450,8 @@ function saveConfig(configData) {
     }
     
     fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), 'utf8');
+    // After first save, we're no longer in first-run state
+    IS_FIRST_RUN = false;
   } catch (error) {
     console.error('Error saving config file:', error);
     throw new Error(`Failed to save configuration: ${error.message}`);
@@ -467,7 +474,8 @@ function getConfig() {
     ROBOSATS_ONION_URL: process.env.ROBOSATS_ONION_URL,
     TARGET_CURRENCIES: process.env.TARGET_CURRENCIES,
     LANGUAGE: process.env.LANGUAGE,
-    BOT_ENABLED: process.env.BOT_ENABLED
+    BOT_ENABLED: process.env.BOT_ENABLED,
+    IS_FIRST_RUN: IS_FIRST_RUN
   };
 }
 
@@ -535,6 +543,11 @@ module.exports = {
   getConfig,
   reloadConfig,
   validateNotificationConfig,
+  
+  // First-run detection
+  get IS_FIRST_RUN() {
+    return IS_FIRST_RUN;
+  },
   
   // Event emitter for config changes
   configEmitter

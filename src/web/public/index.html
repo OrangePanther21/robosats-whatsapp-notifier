@@ -26,7 +26,7 @@
                             <span id="bot-status" class="status-value">Checking...</span>
                             <span id="next-check-time" class="next-check-time"></span>
                         </div>
-                        <button type="button" id="bot-toggle-btn" class="icon-btn" title="Pause/Resume Bot">
+                        <button type="button" id="bot-toggle-btn" class="icon-btn" title="Pause/Resume Bot" style="display: none;">
                             <svg id="pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="6" y="4" width="4" height="16"></rect>
                                 <rect x="14" y="4" width="4" height="16"></rect>
@@ -78,7 +78,10 @@
                 <div class="form-group" id="group-name-field" style="display: none;">
                     <label for="whatsapp-group">WhatsApp Group Name</label>
                     <div style="display: flex; gap: 10px;">
-                        <input type="text" id="whatsapp-group" name="WHATSAPP_GROUP_NAME" style="flex: 1;">
+                        <div class="input-wrapper" style="flex: 1; position: relative;">
+                            <input type="text" id="whatsapp-group" name="WHATSAPP_GROUP_NAME" style="width: 100%;">
+                            <span class="success-icon">✓</span>
+                        </div>
                         <button type="button" id="test-message-btn" class="btn btn-test">Test</button>
                     </div>
                     <small>The exact name of your WhatsApp group</small>
@@ -87,7 +90,7 @@
                 <div class="form-group" id="contact-fields" style="display: none;">
                     <label>Phone Number</label>
                     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                        <div class="country-selector" id="country-selector" style="flex: 0 0 250px;">
+                        <div class="country-selector" id="country-selector" style="flex: 0 0 250px; position: relative;">
                             <div class="country-selector-trigger">
                                 <span class="country-selector-text">Select country...</span>
                                 <span class="country-selector-arrow"></span>
@@ -96,8 +99,12 @@
                                 <input type="text" class="country-selector-search" placeholder="Search countries...">
                                 <div class="country-selector-options"></div>
                             </div>
+                            <span class="success-icon">✓</span>
                         </div>
-                        <input type="text" id="contact-phone" name="CONTACT_PHONE_NUMBER" placeholder="Phone number" style="flex: 1;">
+                        <div class="input-wrapper" style="flex: 1; position: relative;">
+                            <input type="text" id="contact-phone" name="CONTACT_PHONE_NUMBER" placeholder="Phone number" style="width: 100%;">
+                            <span class="success-icon">✓</span>
+                        </div>
                         <button type="button" id="test-contact-btn" class="btn btn-test">Test</button>
                     </div>
                     <input type="hidden" id="contact-country-code" name="CONTACT_COUNTRY_CODE">
@@ -539,6 +546,9 @@
         // Bot enabled state
         let botEnabled = true;
         
+        // First run state
+        let isFirstRun = false;
+        
         // Current notification type
         let currentNotificationType = 'group';
         
@@ -559,6 +569,128 @@
             }
         }
         
+        // Validation helper functions
+        function validateGroupName(name) {
+            return name && name.trim().length > 0;
+        }
+        
+        function validatePhoneNumber(phoneNumber) {
+            if (!phoneNumber) return false;
+            const clean = phoneNumber.replace(/\D/g, '');
+            return clean.length >= 6 && clean.length <= 15;
+        }
+        
+        // Success state management for inputs
+        function showInputSuccess(inputElement) {
+            if (!inputElement) return;
+            
+            // Add success class to input
+            inputElement.classList.add('input-success');
+            
+            // Add success class to wrapper (for icon visibility)
+            const wrapper = inputElement.closest('.input-wrapper');
+            if (wrapper) {
+                wrapper.classList.add('has-success');
+            }
+        }
+        
+        function clearInputSuccess(inputElement) {
+            if (!inputElement) return;
+            
+            // Remove success class from input
+            inputElement.classList.remove('input-success');
+            
+            // Remove success class from wrapper
+            const wrapper = inputElement.closest('.input-wrapper');
+            if (wrapper) {
+                wrapper.classList.remove('has-success');
+            }
+        }
+        
+        function showCountrySelectorSuccess() {
+            const countrySelector = document.getElementById('country-selector');
+            if (countrySelector) {
+                countrySelector.classList.add('input-success', 'has-success');
+            }
+        }
+        
+        function clearCountrySelectorSuccess() {
+            const countrySelector = document.getElementById('country-selector');
+            if (countrySelector) {
+                countrySelector.classList.remove('input-success', 'has-success');
+            }
+        }
+        
+        // Validate all required form fields
+        function validateAllFormFields() {
+            const notificationType = document.querySelector('input[name="NOTIFICATION_TYPE"]:checked')?.value || 'group';
+            
+            // Check notification-specific fields
+            if (notificationType === 'group') {
+                const groupName = document.getElementById('whatsapp-group')?.value || '';
+                if (!validateGroupName(groupName)) {
+                    return false;
+                }
+            } else {
+                const countryCode = countrySelector?.getSelected() || '';
+                const phoneNumber = document.getElementById('contact-phone')?.value || '';
+                if (!countryCode || !validatePhoneNumber(phoneNumber)) {
+                    return false;
+                }
+            }
+            
+            // Check interval
+            const interval = document.getElementById('check-interval')?.value;
+            if (!interval || parseInt(interval) < 1) {
+                return false;
+            }
+            
+            // Check currencies
+            const currencies = document.getElementById('target-currencies')?.value;
+            if (!currencies || currencies.trim().length === 0) {
+                return false;
+            }
+            
+            // Check language
+            const language = document.getElementById('language')?.value;
+            if (!language || language.trim().length === 0) {
+                return false;
+            }
+            
+            // Check onion URL
+            const onionUrl = document.getElementById('robosats-onion')?.value;
+            if (!onionUrl || onionUrl.trim().length === 0) {
+                return false;
+            }
+            
+            return true;
+        }
+        
+        // Update test button states based on input validation
+        function updateTestButtonStates() {
+            const groupTestBtn = document.getElementById('test-message-btn');
+            const contactTestBtn = document.getElementById('test-contact-btn');
+            const whatsappStatus = document.getElementById('whatsapp-status');
+            const isWhatsappReady = whatsappStatus && whatsappStatus.textContent.includes('Connected');
+            
+            // Update group test button
+            if (groupTestBtn) {
+                const groupNameInput = document.getElementById('whatsapp-group');
+                const groupName = groupNameInput ? groupNameInput.value : '';
+                const isGroupValid = validateGroupName(groupName);
+                groupTestBtn.disabled = !isWhatsappReady || !isGroupValid;
+            }
+            
+            // Update contact test button
+            if (contactTestBtn) {
+                const phoneInput = document.getElementById('contact-phone');
+                const phoneNumber = phoneInput ? phoneInput.value : '';
+                const countryCode = countrySelector ? countrySelector.getSelected() : '';
+                const isContactValid = countryCode && validatePhoneNumber(phoneNumber);
+                contactTestBtn.disabled = !isWhatsappReady || !isContactValid;
+            }
+        }
+        
         // Update bot status display and icon
         function updateBotStatusDisplay(enabled, whatsappReady) {
             const botStatus = document.getElementById('bot-status');
@@ -569,12 +701,31 @@
             botEnabled = enabled;
             
             if (!whatsappReady) {
-                // WhatsApp not ready - disable button
-                if (toggleBtn) toggleBtn.disabled = true;
+                // WhatsApp not ready - hide button and show waiting status
+                if (toggleBtn) {
+                    toggleBtn.style.display = 'none';
+                }
+                botStatus.textContent = 'Waiting for Auth';
+                botStatus.className = 'status-value status-waiting';
                 return;
             }
             
-            if (toggleBtn) toggleBtn.disabled = false;
+            // Hide button on first run (user must save settings first)
+            // Show button only after bot has been started at least once
+            if (isFirstRun) {
+                if (toggleBtn) {
+                    toggleBtn.style.display = 'none';
+                }
+                botStatus.textContent = 'Not Started';
+                botStatus.className = 'status-value status-paused';
+                return;
+            }
+            
+            // WhatsApp is ready and not first run - show button
+            if (toggleBtn) {
+                toggleBtn.style.display = '';
+                toggleBtn.disabled = false;
+            }
             
             if (enabled) {
                 botStatus.textContent = 'Running';
@@ -589,6 +740,9 @@
                 if (playIcon) playIcon.style.display = 'block';
                 if (toggleBtn) toggleBtn.title = 'Resume Bot';
             }
+            
+            // Update submit button label when bot status changes
+            updateSubmitButtonLabel();
         }
         
         // Toggle notification type fields visibility
@@ -609,6 +763,7 @@
             }
             
             updateSaveButtonState();
+            updateTestButtonStates();
         }
         
         // Fields to track for form changes (excludes BOT_ENABLED which is controlled separately)
@@ -660,6 +815,23 @@
         // Update save button state
         let isFormInitialized = false;
         
+        // Update submit button label based on state
+        function updateSubmitButtonLabel() {
+            const saveBtn = document.querySelector('button[type="submit"]');
+            if (!saveBtn) return;
+            
+            // If first run, show full label
+            // If bot is paused, show "Save Settings and Start Bot"
+            // If bot is running, show "Save & Restart"
+            if (isFirstRun) {
+                saveBtn.textContent = 'Save Settings and Start Bot';
+            } else if (!botEnabled) {
+                saveBtn.textContent = 'Save Settings and Start Bot';
+            } else {
+                saveBtn.textContent = 'Save & Restart';
+            }
+        }
+        
         function updateSaveButtonState() {
             if (!isFormInitialized) {
                 console.log('Form not initialized yet, skipping updateSaveButtonState');
@@ -668,8 +840,23 @@
             const saveBtn = document.querySelector('button[type="submit"]');
             if (saveBtn) {
                 const hasChanges = hasFormChanged();
-                console.log('updateSaveButtonState called, hasChanges:', hasChanges);
-                saveBtn.disabled = !hasChanges;
+                const isValid = validateAllFormFields();
+                
+                console.log('updateSaveButtonState called, hasChanges:', hasChanges, 'isValid:', isValid, 'isFirstRun:', isFirstRun);
+                
+                // Enable button if:
+                // 1. On first run and all fields are valid (allow initial configuration)
+                // 2. Not first run, has changes, and all fields are valid
+                if (isFirstRun || !botEnabled) {
+                    // First run or bot paused - enable if valid (ignore changes)
+                    saveBtn.disabled = !isValid;
+                } else {
+                    // Normal operation - enable if has changes AND valid
+                    saveBtn.disabled = !hasChanges || !isValid;
+                }
+                
+                // Update label whenever state changes
+                updateSubmitButtonLabel();
             }
         }
         
@@ -690,6 +877,11 @@
                     botEnabled = settings.BOT_ENABLED !== 'false' && settings.BOT_ENABLED !== false;
                 }
                 
+                // Load IS_FIRST_RUN flag
+                if (settings.IS_FIRST_RUN !== undefined) {
+                    isFirstRun = settings.IS_FIRST_RUN === true || settings.IS_FIRST_RUN === 'true';
+                }
+                
                 Object.keys(settings).forEach(key => {
                     const input = document.querySelector(`[name="${key}"]`);
                     if (input && settings[key] !== undefined && key !== 'BOT_ENABLED') {
@@ -697,7 +889,13 @@
                             input.checked = settings[key] !== 'false' && settings[key] !== false;
                         } else if (key !== 'TARGET_CURRENCIES' && key !== 'ROBOSATS_COORDINATORS' && key !== 'LANGUAGE' && key !== 'NOTIFICATION_TYPE') {
                             // Skip NOTIFICATION_TYPE - radio buttons are handled separately below
-                            input.value = settings[key];
+                            // Don't pre-fill group name and phone number - keep them empty by default
+                            if (key === 'WHATSAPP_GROUP_NAME' || key === 'CONTACT_PHONE_NUMBER') {
+                                // Leave empty - user should enter these manually
+                                input.value = '';
+                            } else {
+                                input.value = settings[key];
+                            }
                         }
                     }
                 });
@@ -736,17 +934,21 @@
                 };
                 document.getElementById('language').value = languageMultiSelect.getSelected()[0] || '';
                 
-                // Load country selector
+                // Load country selector (don't pre-select - keep empty by default)
                 const countries = await fetch('/api/countries').then(r => r.json());
-                const selectedCountryCode = settings.CONTACT_COUNTRY_CODE;
-                countrySelector = new CountrySelector('country-selector', countries, selectedCountryCode);
+                // Don't pre-select country code - leave empty by default
+                countrySelector = new CountrySelector('country-selector', countries, null);
                 countrySelector.onChange = () => {
                     document.getElementById('contact-country-code').value = countrySelector.getSelected() || '';
                     updateSaveButtonState();
+                    updateTestButtonStates();
+                    // Clear success state when country changes
+                    clearCountrySelectorSuccess();
                 };
-                if (selectedCountryCode) {
-                    document.getElementById('contact-country-code').value = selectedCountryCode;
-                }
+                // Don't set contact-country-code - keep it empty
+                
+                // Initial test button state update
+                updateTestButtonStates();
                 
                 // Set notification type radio buttons
                 const notificationType = settings.NOTIFICATION_TYPE || 'group';
@@ -783,7 +985,20 @@
                     // Allow only digits, spaces, dashes, and parentheses for formatting
                     e.target.value = e.target.value.replace(/[^\d\s\-()]/g, '');
                     updateSaveButtonState();
+                    updateTestButtonStates();
+                    // Clear success state when value changes
+                    clearInputSuccess(e.target);
                 });
+                
+                // Add group name input listener for test button validation
+                const groupNameInput = document.getElementById('whatsapp-group');
+                if (groupNameInput) {
+                    groupNameInput.addEventListener('input', (e) => {
+                        updateTestButtonStates();
+                        // Clear success state when value changes
+                        clearInputSuccess(e.target);
+                    });
+                }
                 
                 // Add change listeners to form inputs
                 const form = document.getElementById('settings-form');
@@ -962,6 +1177,7 @@
                     whatsappStatus.className = 'status-value status-running';
                     document.getElementById('qr-section').style.display = 'none';
                     setFormEnabled(true);
+                    updateTestButtonStates();
                     
                     // Start countdown timer if bot is enabled and we have a timestamp
                     if (botEnabled && status.nextCheckTime) {
@@ -970,6 +1186,7 @@
                 } else if (status.qrData) {
                     const botStatus = document.getElementById('bot-status');
                     botStatus.textContent = 'Waiting for Auth';
+                    updateTestButtonStates();
                     botStatus.className = 'status-value status-waiting';
                     whatsappStatus.textContent = 'Scan QR Code';
                     whatsappStatus.className = 'status-value status-waiting';
@@ -981,7 +1198,7 @@
                     renderCountdown();
                 } else {
                     const botStatus = document.getElementById('bot-status');
-                    botStatus.textContent = 'Starting...';
+                    botStatus.textContent = 'Initializing';
                     botStatus.className = 'status-value status-waiting';
                     whatsappStatus.textContent = 'Initializing';
                     whatsappStatus.className = 'status-value status-waiting';
@@ -1012,6 +1229,7 @@
                     document.getElementById('whatsapp-status').className = 'status-value status-waiting';
                     setFormEnabled(false);
                     updateBotStatusDisplay(botEnabled, false);
+                    updateTestButtonStates();
                 }
                 
                 if (data.authenticated || data.ready) {
@@ -1021,6 +1239,7 @@
                     if (data.ready) {
                         updateBotStatusDisplay(botEnabled, true);
                         setFormEnabled(true);
+                        updateTestButtonStates();
                     }
                 }
             };
@@ -1105,12 +1324,16 @@
                 delete settings.CONTACT_PHONE_NUMBER;
             }
             
-            // Don't include BOT_ENABLED - it's controlled by the separate pause/play button
-            delete settings.BOT_ENABLED;
-            
-            // Get current BOT_ENABLED value from config to preserve it
-            const currentConfig = await fetch('/api/settings').then(r => r.json());
-            settings.BOT_ENABLED = currentConfig.BOT_ENABLED || 'true';
+            // Handle BOT_ENABLED based on current state
+            // If first run or bot is paused, save will start the bot
+            // Otherwise, preserve current BOT_ENABLED state
+            if (isFirstRun || !botEnabled) {
+                // User clicked "Start Bot" - enable the bot
+                settings.BOT_ENABLED = 'true';
+            } else {
+                // User clicked "Save & Restart" - keep bot enabled
+                settings.BOT_ENABLED = 'true';
+            }
             
             let saveSucceeded = false;
             
@@ -1129,12 +1352,23 @@
                     saveSucceeded = true;
                     showMessage(result.message, 'success', 5000);
                     
+                    // After first save, no longer first run
+                    if (isFirstRun) {
+                        isFirstRun = false;
+                    }
+                    
+                    // Bot is now enabled after save
+                    botEnabled = true;
+                    
                     // Fetch updated status to get new nextCheckTime after config change
                     const statusResponse = await fetch('/api/status');
                     const newStatus = await statusResponse.json();
                     
+                    // Update bot status display
+                    updateBotStatusDisplay(true, true);
+                    
                     // Restart countdown timer with new timestamp
-                    if (botEnabled && newStatus.nextCheckTime) {
+                    if (newStatus.nextCheckTime) {
                         startCountdownTimer(newStatus.nextCheckTime);
                     }
                     
@@ -1218,13 +1452,22 @@
                 
                 if (response.ok) {
                     showMessage(result.message, 'success', 5000);
+                    
+                    // Show success feedback on input field
+                    showInputSuccess(groupNameInput);
+                    
+                    // Restore button
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    updateTestButtonStates();
                 } else {
                     showMessage(result.error || 'Failed to send test message', 'error', 10000);
+                    btn.disabled = false;
+                    btn.textContent = originalText;
                 }
             } catch (error) {
                 console.error('Error sending test message:', error);
                 showMessage('Error sending test message', 'error', 10000);
-            } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
             }
@@ -1277,13 +1520,24 @@
                 
                 if (response.ok) {
                     showMessage(result.message, 'success', 5000);
+                    
+                    // Show success feedback on country selector and phone input
+                    const phoneInput = document.getElementById('contact-phone');
+                    showCountrySelectorSuccess();
+                    showInputSuccess(phoneInput);
+                    
+                    // Restore button
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    updateTestButtonStates();
                 } else {
                     showMessage(result.error || 'Failed to send test message', 'error', 10000);
+                    btn.disabled = false;
+                    btn.textContent = originalText;
                 }
             } catch (error) {
                 console.error('Error sending test message:', error);
                 showMessage('Error sending test message', 'error', 10000);
-            } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
             }
