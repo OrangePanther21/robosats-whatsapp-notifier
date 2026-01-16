@@ -8,8 +8,8 @@
     </radialGradient>
   </defs>
   
-  <!-- Rounded rectangle background -->
-  <rect width="1024" height="1024" rx="180" ry="180" fill="url(#robosatsGradient)"/>
+  <!-- Square background (no rounded corners - Umbrel adds them) -->
+  <rect width="1024" height="1024" fill="url(#robosatsGradient)"/>
   
   <!-- Robot body (scaled up 1.4x and positioned lower) -->
   <g transform="translate(512, 540) scale(1.4)">
