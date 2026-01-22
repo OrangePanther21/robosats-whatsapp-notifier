@@ -474,6 +474,7 @@ function getConfig() {
     TARGET_CURRENCIES: process.env.TARGET_CURRENCIES,
     LANGUAGE: process.env.LANGUAGE,
     BOT_ENABLED: process.env.BOT_ENABLED,
+    DELETE_INACTIVE_MESSAGES: process.env.DELETE_INACTIVE_MESSAGES,
     IS_FIRST_RUN: IS_FIRST_RUN
   };
 }
@@ -498,6 +499,7 @@ function reloadConfig() {
   config.LANGUAGE = parseLanguage();
   config.LOG_LEVEL = process.env.LOG_LEVEL || 'info';
   config.BOT_ENABLED = process.env.BOT_ENABLED !== 'false'; // Default to true
+  config.DELETE_INACTIVE_MESSAGES = process.env.DELETE_INACTIVE_MESSAGES === 'true';
   
   // Emit config change event
   configEmitter.emit('configChanged');
@@ -532,6 +534,9 @@ module.exports = {
   
   // Bot enabled/disabled state
   BOT_ENABLED: process.env.BOT_ENABLED !== 'false', // Default to true
+  
+  // Auto-delete inactive messages
+  DELETE_INACTIVE_MESSAGES: process.env.DELETE_INACTIVE_MESSAGES === 'true',
   
   DATA_DIR: './data',
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',

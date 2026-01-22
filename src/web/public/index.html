@@ -174,6 +174,22 @@
                     <small>Tor onion address for RoboSats (required for fetching offers)</small>
                 </div>
 
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="delete-inactive" name="DELETE_INACTIVE_MESSAGES">
+                        <span>Auto-delete messages for inactive offers</span>
+                    </label>
+                    <small>When enabled, messages are automatically deleted when offers are taken, cancelled, or expired</small>
+                    <div class="info-note" style="margin-top: 10px; padding: 12px; background: #fef3c7; border-radius: 6px; font-size: 0.85rem;">
+                        <strong>Requirements and Limitations:</strong>
+                        <ul style="margin: 8px 0 0 16px; padding: 0;">
+                            <li>Messages can only be deleted within 60 hours of sending</li>
+                            <li>For group notifications: bot must be a group admin</li>
+                            <li>Deletion may fail if recipients use old WhatsApp versions</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary" disabled>Save Settings</button>
                 </div>
@@ -870,7 +886,8 @@
             'TARGET_CURRENCIES',
             'LANGUAGE',
             'ROBOSATS_COORDINATORS',
-            'ROBOSATS_ONION_URL'
+            'ROBOSATS_ONION_URL',
+            'DELETE_INACTIVE_MESSAGES'
         ];
         
         // Get current form values (only tracked fields)
@@ -879,7 +896,11 @@
             TRACKED_FIELDS.forEach(field => {
                 const input = document.querySelector(`[name="${field}"]`);
                 if (input) {
-                    values[field] = (input.value || '').trim();
+                    if (input.type === 'checkbox') {
+                        values[field] = input.checked ? 'true' : 'false';
+                    } else {
+                        values[field] = (input.value || '').trim();
+                    }
                 }
             });
             return values;
@@ -980,16 +1001,10 @@
                     const input = document.querySelector(`[name="${key}"]`);
                     if (input && settings[key] !== undefined && key !== 'BOT_ENABLED') {
                         if (input.type === 'checkbox') {
-                            input.checked = settings[key] !== 'false' && settings[key] !== false;
+                            input.checked = settings[key] === 'true' || settings[key] === true;
                         } else if (key !== 'TARGET_CURRENCIES' && key !== 'ROBOSATS_COORDINATORS' && key !== 'LANGUAGE' && key !== 'NOTIFICATION_TYPE') {
                             // Skip NOTIFICATION_TYPE - radio buttons are handled separately below
-                            // Don't pre-fill group name and phone number - keep them empty by default
-                            if (key === 'WHATSAPP_GROUP_NAME' || key === 'CONTACT_PHONE_NUMBER') {
-                                // Leave empty - user should enter these manually
-                                input.value = '';
-                            } else {
-                                input.value = settings[key];
-                            }
+                            input.value = settings[key] || '';
                         }
                     }
                 });
@@ -1105,6 +1120,12 @@
                         input.addEventListener('input', updateSaveButtonState);
                     }
                 });
+                
+                // Add change listener to delete inactive messages checkbox
+                const deleteInactiveCheckbox = document.getElementById('delete-inactive');
+                if (deleteInactiveCheckbox) {
+                    deleteInactiveCheckbox.addEventListener('change', updateSaveButtonState);
+                }
                 
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -1390,6 +1411,12 @@
             const formData = new FormData(e.target);
             const settings = Object.fromEntries(formData.entries());
             
+            // Handle checkbox - FormData doesn't include unchecked checkboxes
+            const deleteInactiveCheckbox = document.getElementById('delete-inactive');
+            if (deleteInactiveCheckbox) {
+                settings.DELETE_INACTIVE_MESSAGES = deleteInactiveCheckbox.checked ? 'true' : 'false';
+            }
+            
             // Validate notification settings
             const notificationType = settings.NOTIFICATION_TYPE || 'group';
             
@@ -1429,15 +1456,8 @@
                 }
             }
             
-            // Clean up opposite notification type's fields
-            if (notificationType === 'contact') {
-                // Delete group name when switching to contact
-                delete settings.WHATSAPP_GROUP_NAME;
-            } else {
-                // Delete contact fields when switching to group
-                delete settings.CONTACT_COUNTRY_CODE;
-                delete settings.CONTACT_PHONE_NUMBER;
-            }
+            // Keep all notification fields - let NOTIFICATION_TYPE determine which is used
+            // This preserves user settings when switching between group/contact modes
             
             // Handle BOT_ENABLED based on current state
             // If first run or bot is paused, save will start the bot

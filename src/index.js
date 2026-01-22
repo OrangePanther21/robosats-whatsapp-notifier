@@ -81,6 +81,31 @@ async function checkForNewOffersInternal() {
       return;
     }
     
+    // Delete messages for inactive offers if feature is enabled
+    if (config.DELETE_INACTIVE_MESSAGES) {
+      const trackedIds = offerTracker.getTrackedOfferIds();
+      const currentIds = new Set(allOffers.map(o => o.id));
+      
+      for (const trackedId of trackedIds) {
+        if (!currentIds.has(trackedId)) {
+          // Offer is no longer in the current list (taken, cancelled, or expired)
+          const messageId = offerTracker.getMessageId(trackedId);
+          if (messageId) {
+            try {
+              const deleted = await whatsappClient.deleteMessage(messageId);
+              if (deleted) {
+                logger.info(`Deleted message for inactive offer #${trackedId}`);
+              }
+            } catch (error) {
+              logger.warn(`Failed to delete message for offer #${trackedId}: ${error.message}`);
+            }
+          }
+          // Remove from tracker regardless of deletion success
+          await offerTracker.removeOffer(trackedId);
+        }
+      }
+    }
+    
     const newOffers = offerTracker.getNewOffers(allOffers);
     
     if (newOffers.length > 0) {
@@ -95,14 +120,17 @@ async function checkForNewOffersInternal() {
         }
         
         const message = formatOffer(offer);
-        await whatsappClient.sendNotification(message);
+        const sentMessage = await whatsappClient.sendNotification(message);
+        
+        // Store offer with message ID for deletion tracking
+        const messageId = sentMessage && sentMessage.id ? sentMessage.id._serialized : null;
+        await offerTracker.addOffer(offer, messageId);
+        
         // Small delay between messages to avoid rate limiting
         if (newOffers.length > 1) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
-      
-      await offerTracker.addOffers(newOffers);
       
       logger.info(`Successfully sent ${newOffers.length} offer notification(s)`);
     } else {

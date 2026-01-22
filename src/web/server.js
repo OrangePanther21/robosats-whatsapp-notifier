@@ -51,16 +51,8 @@ class WebServer {
         // Merge new settings with existing config
         const mergedConfig = { ...existingConfig, ...newSettings };
         
-        // Clean up opposite notification type's fields based on notification type
-        const notificationType = mergedConfig.NOTIFICATION_TYPE || 'group';
-        if (notificationType === 'contact') {
-          // Delete group name when switching to contact
-          delete mergedConfig.WHATSAPP_GROUP_NAME;
-        } else {
-          // Delete contact fields when switching to group
-          delete mergedConfig.CONTACT_COUNTRY_CODE;
-          delete mergedConfig.CONTACT_PHONE_NUMBER;
-        }
+        // Keep all notification fields - let NOTIFICATION_TYPE determine which is used
+        // This preserves user settings when switching between group/contact modes
         
         config.saveConfig(mergedConfig);
         
@@ -219,7 +211,7 @@ class WebServer {
             });
           }
 
-          await group.sendMessage(testMessage, { linkPreview: false });
+          await this.whatsappClient.client.sendMessage(group.id._serialized, testMessage, { linkPreview: false });
           
           res.json({ 
             success: true, 

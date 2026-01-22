@@ -29,8 +29,8 @@ class WhatsAppClient extends EventEmitter {
     this.client = new Client({
       authStrategy: new LocalAuth({ dataPath: authPath }),
       puppeteer: {
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
       }
     });
 
@@ -90,6 +90,11 @@ class WhatsAppClient extends EventEmitter {
   }
 
   async initialize() {
+    // Add loading screen listener for visibility
+    this.client.on('loading_screen', (percent, message) => {
+      logger.info(`WhatsApp loading: ${percent}% - ${message}`);
+    });
+    
     await this.client.initialize();
   }
 
@@ -107,8 +112,9 @@ class WhatsAppClient extends EventEmitter {
       throw new Error(`Group "${config.WHATSAPP_GROUP_NAME}" not found`);
     }
 
-    await group.sendMessage(message, { linkPreview: false });
+    const sentMessage = await this.client.sendMessage(group.id._serialized, message, { linkPreview: false });
     logger.info('Message sent to WhatsApp group');
+    return sentMessage;
   }
 
   async sendToContact(countryCode, phoneNumber, message) {
@@ -123,8 +129,9 @@ class WhatsAppClient extends EventEmitter {
     const chatId = `${cleanCountryCode}${cleanPhoneNumber}@c.us`;
 
     try {
-      await this.client.sendMessage(chatId, message, { linkPreview: false });
+      const sentMessage = await this.client.sendMessage(chatId, message, { linkPreview: false });
       logger.info(`Message sent to WhatsApp contact: ${chatId}`);
+      return sentMessage;
     } catch (error) {
       logger.error(`Failed to send message to contact ${chatId}:`, error);
       throw new Error(`Failed to send message to contact +${cleanCountryCode} ${cleanPhoneNumber}: ${error.message}`);
@@ -142,10 +149,30 @@ class WhatsAppClient extends EventEmitter {
         throw new Error('Contact notification type selected but country code or phone number not configured');
       }
 
-      await this.sendToContact(countryCode, phoneNumber, message);
+      return await this.sendToContact(countryCode, phoneNumber, message);
     } else {
       // Default to group
-      await this.sendToGroup(message);
+      return await this.sendToGroup(message);
+    }
+  }
+
+  async deleteMessage(messageId) {
+    if (!this.isReady) {
+      throw new Error('WhatsApp client is not ready');
+    }
+    
+    try {
+      const message = await this.client.getMessageById(messageId);
+      if (message) {
+        await message.delete(true); // true = delete for everyone
+        logger.info(`Deleted message ${messageId}`);
+        return true;
+      }
+      logger.warn(`Message ${messageId} not found`);
+      return false;
+    } catch (error) {
+      logger.warn(`Failed to delete message ${messageId}: ${error.message}`);
+      return false;
     }
   }
 }

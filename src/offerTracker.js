@@ -16,18 +16,45 @@ class OfferTracker {
       const data = await fs.readFile(this.dataFile, 'utf-8');
       const parsed = JSON.parse(data);
       
-      // Handle both old format (array) and new format (object)
+      // Handle multiple format versions
       if (Array.isArray(parsed)) {
-        // Migrate from old format: assign expiration timestamp (now + 24h fallback)
+        // Migrate from old format (array): assign expiration timestamp (now + 24h fallback)
         logger.info('Migrating offer tracking format from array to expiration-based map');
         const expirationTime = Date.now() + this.defaultMaxAge;
-        parsed.forEach(offerId => this.seenOffers.set(offerId, expirationTime));
+        parsed.forEach(offerId => {
+          this.seenOffers.set(offerId, {
+            expiresAt: expirationTime,
+            messageId: null,
+            sentAt: null
+          });
+        });
         await this.save(); // Save in new format
       } else {
-        // New format: object with expiration timestamps
-        Object.entries(parsed).forEach(([offerId, expiresAt]) => {
-          this.seenOffers.set(parseInt(offerId), expiresAt);
+        // Object format - check if old (just timestamp) or new (with messageId)
+        Object.entries(parsed).forEach(([offerId, value]) => {
+          if (typeof value === 'number') {
+            // Old format: just expiration timestamp
+            this.seenOffers.set(parseInt(offerId), {
+              expiresAt: value,
+              messageId: null,
+              sentAt: null
+            });
+          } else if (typeof value === 'object' && value !== null) {
+            // New format: object with expiresAt, messageId, sentAt
+            this.seenOffers.set(parseInt(offerId), {
+              expiresAt: value.expiresAt,
+              messageId: value.messageId || null,
+              sentAt: value.sentAt || null
+            });
+          }
         });
+        
+        // Save if we migrated from old format
+        const needsMigration = Object.values(parsed).some(v => typeof v === 'number');
+        if (needsMigration) {
+          logger.info('Migrating offer tracking format to include message IDs');
+          await this.save();
+        }
       }
       
       logger.info(`Loaded ${this.seenOffers.size} previously seen offers`);
@@ -47,8 +74,8 @@ class OfferTracker {
   async save() {
     // Convert Map to plain object for JSON serialization
     const obj = {};
-    this.seenOffers.forEach((expiresAt, offerId) => {
-      obj[offerId] = expiresAt;
+    this.seenOffers.forEach((value, offerId) => {
+      obj[offerId] = value;
     });
     const data = JSON.stringify(obj, null, 2);
     await fs.writeFile(this.dataFile, data, 'utf-8');
@@ -58,7 +85,8 @@ class OfferTracker {
     const now = Date.now();
     let removedCount = 0;
     
-    for (const [offerId, expiresAt] of this.seenOffers.entries()) {
+    for (const [offerId, value] of this.seenOffers.entries()) {
+      const expiresAt = typeof value === 'number' ? value : value.expiresAt;
       if (expiresAt <= now) {
         this.seenOffers.delete(offerId);
         removedCount++;
@@ -75,7 +103,7 @@ class OfferTracker {
     return !this.seenOffers.has(offerId);
   }
 
-  markAsSeen(offer) {
+  markAsSeen(offer, messageId = null) {
     // Store the offer's expiration time, or use a default if not available
     let expiresAt;
     if (offer.expires_at) {
@@ -90,11 +118,20 @@ class OfferTracker {
       expiresAt = Date.now() + this.defaultMaxAge;
     }
     
-    this.seenOffers.set(offer.id, expiresAt);
+    this.seenOffers.set(offer.id, {
+      expiresAt: expiresAt,
+      messageId: messageId,
+      sentAt: Date.now()
+    });
   }
 
   getNewOffers(offers) {
     return offers.filter(offer => this.isNew(offer.id));
+  }
+
+  async addOffer(offer, messageId = null) {
+    this.markAsSeen(offer, messageId);
+    await this.save();
   }
 
   async addOffers(offers) {
@@ -107,6 +144,21 @@ class OfferTracker {
     this.seenOffers.clear();
     await this.save();
     logger.info('Offer history cleared successfully');
+  }
+
+  getTrackedOfferIds() {
+    return new Set(this.seenOffers.keys());
+  }
+
+  getMessageId(offerId) {
+    const value = this.seenOffers.get(offerId);
+    if (!value) return null;
+    return typeof value === 'object' ? value.messageId : null;
+  }
+
+  async removeOffer(offerId) {
+    this.seenOffers.delete(offerId);
+    await this.save();
   }
 }
 
