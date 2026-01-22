@@ -61,80 +61,89 @@ if (config.ROBOSATS_USE_MOCK) {
   }
 
   async getOrderBookFromCoordinator(coordinator, currency = null, type = null) {
-    try {
-      const apiBasePath = `/mainnet/${coordinator}/api`;
-      const params = {};
-      if (currency) params.currency = currency;
-      if (type !== null) params.type = type;
-      
-      const axiosInstance = this.getAxiosInstance();
-      const response = await axiosInstance.get(`${apiBasePath}/book/`, { params });
-      
-      // Ensure we always return an array
-      if (!Array.isArray(response.data)) {
-        const responseType = typeof response.data;
-        const responsePreview = responseType === 'string' 
-          ? response.data.substring(0, 100) 
-          : JSON.stringify(response.data).substring(0, 100);
-        logger.warn(`Coordinator ${coordinator} returned non-array response (${responseType}): ${responsePreview}${responsePreview.length >= 100 ? '...' : ''}`);
-        return [];
-      }
-      
-      return response.data;
-    } catch (error) {
-      // Log detailed error information
-      if (error.response) {
-        // HTTP error response - include response body for debugging
-        const responseBody = typeof error.response.data === 'string' 
-          ? error.response.data.substring(0, 200)
-          : JSON.stringify(error.response.data).substring(0, 200);
-        logger.error(`Error fetching order book from ${coordinator}: HTTP ${error.response.status} ${error.response.statusText}`);
-        logger.error(`Response body: ${responseBody}`);
-        logger.error(`Request URL: ${this.apiUrl}/mainnet/${coordinator}/api/book/`);
-      } else if (error.request) {
-        // Request made but no response received
-        logger.error(`Error fetching order book from ${coordinator}: No response received (timeout or network error)`);
-      } else {
-        // Something else happened
-        logger.error(`Error fetching order book from ${coordinator}: ${error.message}`);
-      }
-      return []; // Return empty array on error so other coordinators can still be checked
+    const apiBasePath = `/mainnet/${coordinator}/api`;
+    const params = {};
+    if (currency) params.currency = currency;
+    if (type !== null) params.type = type;
+    
+    const axiosInstance = this.getAxiosInstance();
+    const response = await axiosInstance.get(`${apiBasePath}/book/`, { params });
+    
+    // Ensure we always return an array
+    if (!Array.isArray(response.data)) {
+      const error = new Error('Invalid response format');
+      error.code = 'INVALID_RESPONSE';
+      throw error;
     }
+    
+    return response.data;
   }
 
   async getOrderBook(currency = null, type = null) {
-    // Check all coordinators and aggregate results
+    const coordinators = this.coordinators;
+    const startTime = Date.now();
+    
+    logger.info(`Fetching from ${coordinators.length} coordinator(s) in parallel...`);
+    
+    // Fetch from all coordinators in parallel
+    const results = await Promise.allSettled(
+      coordinators.map(async (coordinator) => {
+        const coordStartTime = Date.now();
+        try {
+          const offers = await this.getOrderBookFromCoordinator(coordinator, currency, type);
+          const duration = Date.now() - coordStartTime;
+          return { coordinator, offers, duration, success: true };
+        } catch (error) {
+          const duration = Date.now() - coordStartTime;
+          const errorMsg = error.response 
+            ? `HTTP ${error.response.status}`
+            : error.code || error.message || 'Unknown error';
+          return { coordinator, error: errorMsg, duration, success: false };
+        }
+      })
+    );
+    
+    // Process results and build summary
     const allOffers = [];
     const reachableCoordinators = new Set();
+    const summary = [];
     
-    for (const coordinator of this.coordinators) {
-      try {
-        const offers = await this.getOrderBookFromCoordinator(coordinator, currency, type);
-        
-        // Validate that offers is an array
-        if (!Array.isArray(offers)) {
-          logger.warn(`Skipping ${coordinator} coordinator: API returned non-array response (${typeof offers})`);
-          continue;
-        }
-        
-        // Mark this coordinator as successfully reached
-        reachableCoordinators.add(coordinator);
-        
-        // Add coordinator info to each offer for tracking
-        const offersWithCoordinator = offers.map(offer => ({
-          ...offer,
-          coordinator: coordinator
-        }));
-        allOffers.push(...offersWithCoordinator);
-        logger.info(`Found ${offers.length} offers from ${coordinator} coordinator`);
-      } catch (error) {
-        // Error already logged in getOrderBookFromCoordinator, just warn here
-        const errorMsg = error.response 
-          ? `HTTP ${error.response.status}: ${error.response.statusText}`
-          : error.message || 'Unknown error';
-        logger.warn(`Skipping ${coordinator} coordinator: ${errorMsg}`);
+    for (const result of results) {
+      // Promise.allSettled always fulfills, but check just in case
+      if (result.status === 'rejected') {
+        summary.push(`  unknown: ERROR - ${result.reason}`);
+        continue;
       }
+      
+      const { coordinator, offers, duration, success, error } = result.value;
+      
+      if (!success) {
+        summary.push(`  ${coordinator}: ERROR - ${error} (${duration}ms)`);
+        continue;
+      }
+      
+      // Validate that offers is an array
+      if (!Array.isArray(offers)) {
+        summary.push(`  ${coordinator}: ERROR - invalid response (${duration}ms)`);
+        continue;
+      }
+      
+      // Mark this coordinator as successfully reached
+      reachableCoordinators.add(coordinator);
+      
+      // Add coordinator info to each offer
+      const offersWithCoordinator = offers.map(offer => ({
+        ...offer,
+        coordinator: coordinator
+      }));
+      allOffers.push(...offersWithCoordinator);
+      summary.push(`  ${coordinator}: ${offers.length} offers (${duration}ms)`);
     }
+    
+    // Log summary
+    const totalDuration = Date.now() - startTime;
+    summary.forEach(line => logger.info(line));
+    logger.info(`Total: ${allOffers.length} offers from ${reachableCoordinators.size}/${coordinators.length} coordinator(s) in ${totalDuration}ms`);
     
     return { offers: allOffers, reachableCoordinators };
   }
@@ -160,9 +169,7 @@ if (config.ROBOSATS_USE_MOCK) {
     });
 
     const currencyCodes = config.TARGET_CURRENCIES.map(c => c.code).join(', ');
-    const reachableCount = reachableCoordinators.size;
-    const totalCoordinators = this.coordinators.length;
-    logger.info(`Found ${offers.length} offers (${currencyCodes}) from ${reachableCount}/${totalCoordinators} reachable coordinator(s) out of ${orderBook.length} total offers`);
+    logger.info(`Filtered to ${offers.length} offers matching target currencies (${currencyCodes})`);
     
     return { offers, reachableCoordinators };
   }
