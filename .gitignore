@@ -5,3 +5,6 @@ node_modules/
 .wwebjs_cache/
 data/
 *.log
+
+RELEASE_COMMANDS.md
+RELEASE_GUIDE.md
