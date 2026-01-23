@@ -2,7 +2,7 @@ manifestVersion: 1
 id: robosats-notifier
 category: finance
 name: RoboSats Notifier
-version: "1.2.0"
+version: "1.2.1"
 tagline: Get instant notifications for new RoboSats offers
 description: >-
   **Unofficial community tool** - Monitor RoboSats order book and receive instant notifications when new offers match your criteria.
@@ -45,11 +45,8 @@ permissions:
 submitter: Community Contributor
 submission: https://github.com/getumbrel/umbrel-apps
 releaseNotes: >-
-  Version 1.2.0 - Improved Reliability
+  Version 1.2.1 - Bug Fix Release
   
-  Improvements:
-  - Refactored coordinator requests with Promise.allSettled for better error handling
-  - Enhanced logging of coordinator responses and errors
-  - Offer tracking now includes coordinator information
-  - Improved logic for deleting inactive offers based on coordinator reachability
-  - Better insights into offer retrieval from multiple coordinators
+  Bug Fixes:
+  - Fixed bug where expired offers were not having their WhatsApp messages deleted
+  - Removed redundant cleanup logic that was interfering with proper message deletion
